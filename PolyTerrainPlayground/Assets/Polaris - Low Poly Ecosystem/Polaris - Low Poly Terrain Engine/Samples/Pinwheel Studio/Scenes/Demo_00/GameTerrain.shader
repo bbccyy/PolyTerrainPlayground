@@ -1,4 +1,4 @@
-﻿Shader "Custom/GameTerrain"
+﻿Shader "Custom/GameTerrain_URP"
 {
 	Properties
 	{
@@ -22,21 +22,26 @@
 		// Set Queue to AlphaTest+2 to render the terrain after all other solid geometry.
 		// We do this because the terrain shader is expensive and this way we ensure most pixels
 		// are already discarded before the fragment shader is executed:
-		Tags{ "Queue" = "AlphaTest+2" }
+		Tags{ "Queue" = "Geometry-100" "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" "IgnoreProjector" = "False" }
 		Pass
 	{
-		Tags{ "LightMode" = "ForwardBase" }
-		CGPROGRAM
+		Tags{ "LightMode" = "UniversalForward" }
+		HLSLPROGRAM
 #pragma vertex vert
 #pragma fragment frag
 		// Make realtime shadows work
-#pragma multi_compile_fwdbase
+//#pragma multi_compile_fwdbase
 		// Skip unnessesary shader variants
-#pragma skip_variants DIRLIGHTMAP_COMBINED LIGHTPROBE_SH POINT SPOT SHADOWS_DEPTH SHADOWS_CUBE VERTEXLIGHT_ON
+//#pragma skip_variants DIRLIGHTMAP_COMBINED LIGHTPROBE_SH POINT SPOT SHADOWS_DEPTH SHADOWS_CUBE VERTEXLIGHT_ON
+#pragma multi_compile _ _MAIN_LIGHT_SHADOWS
+#pragma multi_compile _ _MAIN_LIGHT_SHADOWS_CASCADE
 
-#include "UnityCG.cginc"
-#include "UnityLightingCommon.cginc"
-#include "AutoLight.cginc"
+//#include "UnityCG.cginc"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+//#include "UnityLightingCommon.cginc"
+//#include "AutoLight.cginc"
 
 		sampler2D _SplatMap;
 		sampler2D _TextureA;
@@ -70,7 +75,9 @@
 		float2 uvMaterial : TEXCOORD1;
 		half4 materialPrios : TEXCOORD2;
 		// put shadows data into TEXCOORD3
-		SHADOW_COORDS(3)
+		//SHADOW_COORDS(3)
+		half4 shadowCoord : TEXCOORD3;
+
 		half4 color : COLOR0;
 		half3 diff : COLOR1;
 		half3 ambient : COLOR2;
@@ -79,7 +86,7 @@
 	v2f vert(a2v v)
 	{
 		v2f OUT;
-		OUT.pos = UnityObjectToClipPos(v.vertex);
+		OUT.pos = TransformObjectToHClip(v.vertex);
 		OUT.uvSplat = v.uv.xy;
 		// uvs of the rendered materials are based on world position
 		OUT.uvMaterial = mul(unity_ObjectToWorld, v.vertex).xz * _TextureScale;
@@ -87,18 +94,19 @@
 		OUT.color = v.color;
 
 		// calculate light
-		half3 worldNormal = UnityObjectToWorldNormal(v.normal);
-		half nl = max(0, dot(worldNormal, _WorldSpaceLightPos0.xyz));
-		OUT.diff = nl * _LightColor0.rgb;
-		OUT.ambient = ShadeSH9(half4(worldNormal,1));
+		half3 worldNormal = TransformObjectToWorldNormal(v.normal);
+		half nl = max(0, dot(worldNormal, _MainLightPosition.xyz));
+		OUT.diff = nl * _MainLightColor.rgb;
+		OUT.ambient = SampleSH(half4(worldNormal,1));
 
 		// Transfer shadow coordinates:
-		TRANSFER_SHADOW(OUT);
+		//TRANSFER_SHADOW(OUT);
+		OUT.shadowCoord = TransformWorldToShadowCoord(mul(unity_ObjectToWorld, v.vertex));
 
 		return OUT;
 	}
 
-	fixed4 frag(v2f IN) : SV_Target
+	half4 frag(v2f IN) : SV_Target
 	{
 		half4 groundColor = _GroundColor;
 		half4 materialAColor = tex2D(_TextureA, IN.uvMaterial);
@@ -108,7 +116,7 @@
 
 	// store heights for all materials on this pixel
 	half groundHeight = groundColor.a;
-	half4 materialHeights = fixed4(materialAColor.a, materialBColor.a, materialCColor.a, materialDColor.a);
+	half4 materialHeights = half4(materialAColor.a, materialBColor.a, materialCColor.a, materialDColor.a);
 	// avoid black artefacts by division by zero
 	materialHeights = max(0.0001, materialHeights);
 
@@ -152,18 +160,22 @@
 	//col *= IN.color;
 
 	// compute shadow attenuation (1.0 = fully lit, 0.0 = fully shadowed)
-	half shadow = SHADOW_ATTENUATION(IN);
+	//half shadow = SHADOW_ATTENUATION(IN);
+	Light mainLight = GetMainLight(IN.shadowCoord);
+	half shadow = MainLightRealtimeShadow(IN.shadowCoord);
+
 	// darken light's illumination with shadow, keep ambient intact
 	half3 lighting = IN.diff * shadow + IN.ambient;
 
-	col.rgb *= IN.diff * SHADOW_ATTENUATION(IN) + IN.ambient;
+	col.rgb *= IN.diff * shadow + IN.ambient;
 
 	return col;
 	}
-		ENDCG
+		ENDHLSL
 	}
 
 		// shadow casting support
-		UsePass "Legacy Shaders/VertexLit/SHADOWCASTER"
+		//UsePass "Hidden/Nature/Terrain/Utilities/PICKING"
+		UsePass "Universal Render Pipeline/Lit/ShadowCaster"
 	}
 }

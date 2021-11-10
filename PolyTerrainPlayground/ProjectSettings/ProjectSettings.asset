@@ -575,7 +575,7 @@ PlayerSettings:
   webGLThreadsSupport: 0
   webGLWasmStreaming: 0
   scriptingDefineSymbols:
-    1: TEXTURE_GRAPH;POSEIDON;JUPITER;TG_SEARCHER;GRIFFIN;GRIFFIN_2021
+    1: TEXTURE_GRAPH;POSEIDON;JUPITER;TG_SEARCHER;GRIFFIN;GRIFFIN_2021;POSEIDON_URP
   platformArchitecture: {}
   scriptingBackend: {}
   il2cppCompilerConfiguration: {}
