@@ -5,4 +5,9 @@
 -. Magic Light Probes
 -. DynamicSky
 
+###Features
+-. Tile based GI asset loading
+-. ALlow GI modification according to Time of Day/Weather
 
+###TODO
+-. Far side GI contribution
